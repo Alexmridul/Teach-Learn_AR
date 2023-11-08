@@ -1,49 +1,65 @@
 from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
-from utils.decorator import login_required_message
-from django.contrib.auth.decorators import login_required
-
-
-from .models import Subject, Topic
-from utils.email_sender import send_mail
+from .models import Account
 # Create your views here.
-def index(request):
-    subjects = Subject.objects.all()
 
+def login_user(request):
+    if request.user.is_authenticated:
+        return redirect('home')
+    if request.method == 'POST':
+        # print(request.POST)
+        data = request.POST
+        username = data['username']
+        password = data['password']
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('home')
+        else:
+            messages.error(request, "Couldn't Login. Please check your credentials.")
     context = {
-        'subjects':subjects,
+        'is_login':1,
     }
-    return render(request, 'mainapp/index.html', context)
+    return render(request, 'userauth/login.html', context)
 
-@login_required_message(message="Please log in, in order to view the requested page.")
-@login_required
-def subject(request, name):
-    subject = Subject.objects.get(name=name)
-
-    topics = Topic.objects.filter(subject=subject)
-    
-    context = {
-        'subject':subject,
-        'topics':topics,
-    }
-
-    return render(request, 'mainapp/subject/subject.html', context)
-
-@login_required
-def send_email(request):
+def signup(request):
+    if request.user.is_authenticated:
+        return redirect('home')
     if request.method == 'POST':
         data = request.POST
-        print(data)
-        receiver_email = data['email']
-        sender_name = data['sender_name']
-        sender_email = data['sender_email']
-        subject_name = data['subject_name']
-        topic_name = data['topic_name']
-        effect_link = data['effect_link']
+        # print(data)
+        name = data['name']
+        username = data['username']
+        email = data['email']
+        password = data['password']
+        password2 = data['password2']
+        if password == password2:
+            if Account.objects.filter(username=username).exists():
+                messages.info(request, 'Username not available. Use another username.')
+                return redirect('signup')
+            elif Account.objects.filter(email=email).exists():
+                messages.info(request, 'Email not available. Use another email.')
+                return redirect('signup')
+            else:
+                user=Account.objects.create_user(name=name, username=username, email=email, password=password)
+                user.save()
+                login(request, user)
+                messages.info(request, 'Account created successfully.')
+                return redirect('login')
+        else:
+            messages.error(request, 'Please make sure the passwords match.')
+            return redirect('signup')
+    context = {
+        'is_login':0,
+    }
+    return render(request, 'userauth/signup.html', context)
 
-        send_mail(receiver_email, sender_name, sender_email, subject_name, topic_name, effect_link)
-
-
-        messages.info(request, f'Email sent to {receiver_email}')
-        return redirect('subject', subject_name)
+def logout_user(request):
+    if request.method == 'POST' and request.user.is_authenticated:
+        logout(request)
+        messages.info(request, 'You have been logged out.')
+        return redirect('home')
+    if not request.user.is_authenticated:
+        return redirect('home')
     return redirect('home')
